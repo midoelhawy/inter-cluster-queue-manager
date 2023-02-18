@@ -44,7 +44,7 @@ export class clientManager {
 
         for (const clientId of clientsWhereEvenetWillBeSent) {
             if (!this.clients[clientId].response.raw.closed) {
-                const data = `${channel}:${JSON.stringify({ event })}\n\n`;
+                const data = `data: ${JSON.stringify({ event })}\n\n`;
                 this.clients[clientId].response.raw.write(data);
             }
         }
@@ -58,7 +58,6 @@ export class clientManager {
 
 
     getAllActiveTopics(){
-
         return [...new Set(Object.keys(this.clients).map(k=>this.clients[k].topics).flat())]
     }
 
