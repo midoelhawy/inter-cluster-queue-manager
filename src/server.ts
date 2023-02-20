@@ -39,7 +39,7 @@ app.post('/sendMessageToTopic', async (request, res) => {
 
 setInterval(() => {
     console.log(`${sseClientManager.connectedClientsNumber()} Consumer/s connected like now; curentActiveTopics=${sseClientManager.getAllActiveTopics().join()}`);
-}, 10 * 1000);
+}, 60 * 1000);
 
 
 
@@ -118,9 +118,15 @@ app.get('/consume', {
     res.raw.write(`ping:${JSON.stringify({ clientId, connected: true })}\n\n`)
 
 
+    const keepConnectionActive = setInterval(()=>{
+        if(!res.raw.closed) res.raw.write(`ping:${JSON.stringify({ clientId, connected: true,makeConnectionActive:true })}\n\n`)
+    },30*1000)
+
+
     res.raw.on('close', () => {
         console.log(`Connection closed by client `)
-        sseClientManager.deleteClient(clientId)
+        sseClientManager.deleteClient(clientId);
+        clearInterval(keepConnectionActive)
     })
 
 })
