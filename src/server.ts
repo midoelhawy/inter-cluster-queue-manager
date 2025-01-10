@@ -1,47 +1,43 @@
-import fastify from "fastify"
-import { sseClientManager } from "./clientsManager"
+import fastify from "fastify";
+import { sseClientManager } from "./clientsManager";
 
-const port = 3600
+const port = 3600;
 
+const app = fastify({ logger: false });
 
-const app = fastify({ logger: false })
-
-
-app.get('/', async (request, res) => {
-    return "inter-cluster-queue-manager-server up!"
+app.get("/", async (request, res) => {
+  return "inter-cluster-queue-manager-server up!";
 });
 
+app.post("/sendMessageToTopic", async (request, res) => {
+  const body = request.body as {
+    topic: string;
+    message_body: any;
+  };
 
-
-
-app.post('/sendMessageToTopic', async (request, res) => {
-
-    const body = request.body as {
-        topic: string,
-        message_body: any
-    }
-
-    sseClientManager.sendEvents(body.topic, {
-        timestamp: new Date().toISOString(),
-        event: body.message_body,
-        topic:body.topic
+  sseClientManager.sendEvents(
+    body.topic,
+    {
+      timestamp: new Date().toISOString(),
+      event: body.message_body,
+      topic: body.topic,
     },
-        [body.topic]
-    )
+    [body.topic]
+  );
 
-    return {
-        success: true,
-        msg: `event successfully sent`
-    }
-})
-
-
+  return {
+    success: true,
+    msg: `event successfully sent`,
+  };
+});
 
 setInterval(() => {
-    console.log(`${sseClientManager.connectedClientsNumber()} Consumer/s connected like now; curentActiveTopics=${sseClientManager.getAllActiveTopics().join()}`);
+  console.log(
+    `${sseClientManager.connectedClientsNumber()} Consumer/s connected like now; curentActiveTopics=${sseClientManager
+      .getAllActiveTopics()
+      .join()}`
+  );
 }, 60 * 1000);
-
-
 
 /* 
 if (process.env.DEBUG_MODE == "yes") {
@@ -76,71 +72,76 @@ if (process.env.DEBUG_MODE == "yes") {
 
 */
 
-
-app.get('/consume', {
+app.get(
+  "/consume",
+  {
     schema: {
-        querystring: {
-            topic: { type: 'array' }
-        }
-    }
-
-}, async (req, res) => {
-
-
-    const topics = (req.query as {
-        topic: string[]
-    })?.topic
+      querystring: {
+        topic: { type: "array" },
+      },
+    },
+  },
+  async (req, res) => {
+    const topics = (
+      req.query as {
+        topic: string[];
+      }
+    )?.topic;
 
     if (!topics?.length) {
-        res.send({
-            success: false,
-            msg: "Topics requird"
-        })
+      res.send({
+        success: false,
+        msg: "Topics requird",
+      });
     }
 
     //console.log(req)
     const headers = {
-        'Content-Type': 'text/event-stream',
-        Connection: 'keep-alive',
-        'Cache-Control': 'no-cache'
+      "Content-Type": "text/event-stream",
+      Connection: "keep-alive",
+      "Cache-Control": "no-cache",
     };
     res.raw.writeHead(200, headers);
 
-
-
-
     const clientId = sseClientManager.addNewClient({
-        response: res,
-        topics
+      response: res,
+      topics,
     });
 
+    res.raw.write(`ping:${JSON.stringify({ clientId, connected: true })}\n\n`);
 
-    res.raw.write(`ping:${JSON.stringify({ clientId, connected: true })}\n\n`)
+    const keepConnectionActive = setInterval(() => {
+      if (!res.raw.closed)
+        res.raw.write(
+          `ping:${JSON.stringify({
+            clientId,
+            connected: true,
+            makeConnectionActive: true,
+          })}\n\n`
+        );
+    }, 30 * 1000);
 
-
-    const keepConnectionActive = setInterval(()=>{
-        if(!res.raw.closed) res.raw.write(`ping:${JSON.stringify({ clientId, connected: true,makeConnectionActive:true })}\n\n`)
-    },30*1000)
-
-
-    res.raw.on('close', () => {
-        console.log(`Connection closed by client `)
-        sseClientManager.deleteClient(clientId);
-        clearInterval(keepConnectionActive)
-    })
-
-})
-
+    res.raw.on("close", () => {
+      console.log(`Connection closed by client `);
+      sseClientManager.deleteClient(clientId);
+      clearInterval(keepConnectionActive);
+    });
+  }
+);
 
 // Run the server!
 const runServer = async () => {
-    try {
+  try {
+    await app.listen({ port, host: "0.0.0.0" });
+    console.log(`server listen on port ${port}`);
+  } catch (err) {
+    console.error(err);
+    process.exit(1);
+  }
+};
+runServer();
 
-        await app.listen({ port,host:"0.0.0.0" })
-        console.log(`server listen on port ${port}`)
-    } catch (err) {
-        console.error(err)
-        process.exit(1)
-    }
-}
-runServer()
+process.on("SIGTERM", () => {
+  console.log("SIGTERM received");
+  process.exit(0);
+});
