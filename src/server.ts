@@ -77,7 +77,14 @@ app.get(
   {
     schema: {
       querystring: {
-        topic: { type: "array" },
+        type: "object",
+        properties: {
+          topic: {
+            type: "array",
+            items: { type: "string" },
+          },
+        },
+        required: ["topic"],
       },
     },
   },
